@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSV Scanner — CVE Detection POC</title>
+<style>
+  :root {
+    --bg: #f8f7f4;
+    --surface: #ffffff;
+    --border: #e2e0d8;
+    --border2: #c8c6bc;
+    --text: #1a1a18;
+    --text2: #5a5955;
+    --text3: #8a8880;
+    --accent: #1a56db;
+    --accent-bg: #eff6ff;
+    --critical: #991b1b; --critical-bg: #fef2f2; --critical-border: #fca5a5;
+    --high:     #92400e; --high-bg:     #fffbeb; --high-border:     #fcd34d;
+    --medium:   #854f0b; --medium-bg:   #fefce8; --medium-border:   #fde68a;
+    --low:      #065f46; --low-bg:      #ecfdf5; --low-border:      #6ee7b7;
+    --green: #166534; --green-bg: #f0fdf4; --green-border: #86efac;
+    --radius: 10px;
+    --mono: 'Consolas', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.6; min-height: 100vh; }
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; gap: 12px; height: 56px; }
+  .topbar-logo { font-size: 18px; font-weight: 600; color: var(--text); }
+  .topbar-logo span { color: var(--accent); }
+  .topbar-badge { font-size: 11px; background: var(--accent-bg); color: var(--accent); padding: 2px 8px; border-radius: 20px; border: 1px solid #bfdbfe; }
+  .main { max-width: 860px; margin: 0 auto; padding: 32px 24px 64px; }
+  .hero { margin-bottom: 32px; }
+  .hero h1 { font-size: 26px; font-weight: 600; margin-bottom: 6px; }
+  .hero p { color: var(--text2); font-size: 15px; }
+  .warn-banner { background: #fef9c3; border: 1px solid #fde047; border-radius: var(--radius); padding: 10px 14px; font-size: 13px; color: #713f12; margin-bottom: 28px; display: flex; gap: 8px; align-items: flex-start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+  .card-head { padding: 16px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-num.done { background: #16a34a; }
+  .card-head-text h2 { font-size: 15px; font-weight: 600; }
+  .card-head-text p { font-size: 12px; color: var(--text3); margin-top: 1px; }
+  .card-body { padding: 18px 20px; }
+  .field-label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .path-row { display: flex; gap: 8px; }
+  .path-input { flex: 1; padding: 9px 12px; border: 1px solid var(--border2); border-radius: 7px; font-size: 13px; font-family: var(--mono); background: var(--bg); color: var(--text); outline: none; }
+  .path-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(26,86,219,.1); }
+  .hint { font-size: 12px; color: var(--text3); margin-top: 6px; }
+  .hint code { background: var(--bg); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 11px; }
+  .cmd-box { background: #1e1e2e; border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: 12px; color: #cdd6f4; line-height: 1.7; position: relative; margin-top: 8px; }
+  .cmd-box .prompt { color: #89b4fa; }
+  .cmd-box .flag { color: #cba6f7; }
+  .cmd-box .val { color: #a6e3a1; }
+  .cmd-copy { position: absolute; top: 8px; right: 10px; font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid #45475a; background: #313244; color: #cdd6f4; cursor: pointer; }
+  .cmd-copy:hover { background: #45475a; }
+  .btn { padding: 9px 20px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; display: inline-flex; align-items: center; gap: 7px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #1e40af; }
+  .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-success:hover { background: #15803d; }
+  .btn-outline { background: var(--surface); color: var(--text); border: 1px solid var(--border2); }
+  .btn-outline:hover { background: var(--bg); }
+  .status-box { border-radius: 8px; padding: 12px 14px; font-size: 13px; margin-top: 12px; display: none; }
+  .status-box.info    { background: var(--accent-bg); border: 1px solid #bfdbfe; color: #1e40af; }
+  .status-box.success { background: var(--green-bg);  border: 1px solid var(--green-border); color: var(--green); }
+  .status-box.error   { background: var(--critical-bg); border: 1px solid var(--critical-border); color: var(--critical); }
+  .status-box.visible { display: block; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #bfdbfe; border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .results-section { display: none; }
+  .results-section.visible { display: block; }
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; text-align: center; }
+  .stat-num { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .stat-lbl { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
+  .stat-card.critical .stat-num { color: var(--critical); }
+  .stat-card.high     .stat-num { color: #d97706; }
+  .stat-card.medium   .stat-num { color: #ca8a04; }
+  .stat-card.total    .stat-num { color: var(--accent); }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .filter-btn { padding: 4px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; border: 1px solid var(--border2); background: var(--surface); color: var(--text2); transition: all .12s; }
+  .filter-btn.active { font-weight: 500; }
+  .filter-btn.f-all      { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+  .filter-btn.f-critical.active { border-color: var(--critical-border); background: var(--critical-bg); color: var(--critical); }
+  .filter-btn.f-high.active     { border-color: var(--high-border);     background: var(--high-bg);     color: var(--high); }
+  .filter-btn.f-medium.active   { border-color: var(--medium-border);   background: var(--medium-bg);   color: var(--medium); }
+  .filter-btn.f-low.active      { border-color: var(--low-border);      background: var(--low-bg);      color: var(--low); }
+  .search-input { margin-left: auto; padding: 4px 10px; border: 1px solid var(--border2); border-radius: 20px; font-size: 12px; outline: none; width: 180px; }
+  .search-input:focus { border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .sev-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .sev-CRITICAL { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+  .sev-HIGH     { background: var(--high-bg);     color: var(--high);     border: 1px solid var(--high-border); }
+  .sev-MEDIUM   { background: var(--medium-bg);   color: var(--medium);   border: 1px solid var(--medium-border); }
+  .sev-LOW      { background: var(--low-bg);      color: var(--low);      border: 1px solid var(--low-border); }
+  .sev-UNKNOWN  { background: var(--bg); color: var(--text3); border: 1px solid var(--border); }
+  .pkg-name { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 600; }
+  .pkg-ver  { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+  .cve-id   { font-family: var(--mono); font-size: 12px; }
+  .cve-link { color: var(--accent); text-decoration: none; }
+  .cve-link:hover { text-decoration: underline; }
+  .summary-text { font-size: 12px; color: var(--text2); max-width: 260px; }
+  .no-results { text-align: center; padding: 32px; color: var(--text3); font-size: 14px; }
+  .action-row { display: flex; gap: 10px; margin-top: 16px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .footer-note { font-size: 12px; color: var(--text3); margin-top: 24px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">OSV <span>Scanner</span></div>
+  <div class="topbar-badge">CVE Detection POC</div>
+</div>
+
+<div class="main">
+  <div class="hero">
+    <h1>CVE Detection POC</h1>
+    <p>Scan your Java project's <code style="background:var(--border);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:13px">pom.xml</code> for known CVEs using OSV Scanner and export results to CSV.</p>
+  </div>
+
+  <div class="warn-banner">
+    ⚠️ <span><strong>POC only.</strong> This repo contains intentionally vulnerable dependencies for demonstration purposes. Do not use in production.</span>
+  </div>
+
+  <!-- Step 1: Prereqs -->
+  <div class="card">
+    <div class="card-head">
+      <div class="step-num" id="sn1">1</div>
+      <div class="card-head-text">
+        <h2>Prerequisites</h2>
+        <p>One-time setup — confirm you have these before scanning</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field-label">Required on your Windows machine</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:3px">osv-scanner.exe</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Already downloaded in your earlier steps</div>
+          <div class="cmd-box" style="font-size:11px;padding:8px 10px">
+            <span class="prompt">C:\osv-poc&gt;</span> osv-scanner.exe --version
+          </div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:3px">Git</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">To clone the repo to your machine</div>
+          <div class="cmd-box" style="font-size:11px;padding:8px 10px">
+            <span class="prompt">C:\&gt;</span> git --version
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Clone -->
+  <div class="card">
+    <div class="card-head">
+      <div class="step-num" id="sn2">2</div>
+      <div class="card-head-text">
+        <h2>Clone your repo</h2>
+        <p>Clone your GitHub repo to a local folder</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field-label">Run in CMD — replace YOUR-USERNAME with your GitHub username</div>
+      <div class="cmd-box" id="cloneCmd">
+        <span class="prompt">C:\osv-poc&gt;</span> git clone <span class="val">https://github.com/YOUR-USERNAME/osv-java-poc.git</span>
+        <button class="cmd-copy" onclick="copyCmd('cloneCmd')">Copy</button>
+      </div>
+      <div class="hint" style="margin-top:10px">After cloning, your <code>pom.xml</code> will be at <code>C:\osv-poc\osv-java-poc\pom.xml</code></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Scan -->
+  <div class="card">
+    <div class="card-head">
+      <div class="step-num" id="sn3">3</div>
+      <div class="card-head-text">
+        <h2>Run the scan</h2>
+        <p>Point OSV Scanner at your pom.xml and detect CVEs</p>
+      </div>
+    </div>
+    <div class="card-body">
+
+      <div class="field-label">Path to osv-scanner.exe</div>
+      <div class="path-row">
+        <input class="path-input" id="exePath" type="text" value="C:\osv-poc\osv-scanner.exe" placeholder="C:\osv-poc\osv-scanner.exe" />
+      </div>
+      <div class="hint">Full path to your downloaded osv-scanner.exe</div>
+
+      <div class="field-label" style="margin-top:14px">Path to pom.xml</div>
+      <div class="path-row">
+        <input class="path-input" id="pomPath" type="text" value="C:\osv-poc\osv-java-poc\pom.xml" placeholder="C:\osv-poc\osv-java-poc\pom.xml" />
+      </div>
+      <div class="hint">Full path to your project's <code>pom.xml</code></div>
+
+      <div class="field-label" style="margin-top:14px">Generated CMD command</div>
+      <div class="cmd-box" id="scanCmdBox">
+        <span class="prompt">C:\osv-poc&gt;</span>
+        <span id="scanCmdText"></span>
+        <button class="cmd-copy" onclick="copyCmd('scanCmdBox')">Copy</button>
+      </div>
+      <div class="hint">Copy this command, run it in CMD, then paste the JSON output below.</div>
+
+      <div class="field-label" style="margin-top:16px">Paste JSON output here</div>
+      <textarea id="jsonInput" style="width:100%;height:130px;padding:10px 12px;border:1px solid var(--border2);border-radius:7px;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--text);outline:none;resize:vertical;line-height:1.6" placeholder='Paste the contents of osv-report.json here...'></textarea>
+
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+        <button class="btn btn-primary" onclick="runScan()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Analyse CVEs
+        </button>
+        <button class="btn btn-outline" onclick="loadSample()">Load sample output</button>
+      </div>
+
+      <div id="scanStatus" class="status-box"></div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="results-section" id="resultsSection">
+
+    <div class="stats-row">
+      <div class="stat-card total">
+        <div class="stat-num" id="statTotal">0</div>
+        <div class="stat-lbl">Total CVEs</div>
+      </div>
+      <div class="stat-card critical">
+        <div class="stat-num" id="statCritical">0</div>
+        <div class="stat-lbl">Critical</div>
+      </div>
+      <div class="stat-card high">
+        <div class="stat-num" id="statHigh">0</div>
+        <div class="stat-lbl">High</div>
+      </div>
+      <div class="stat-card medium">
+        <div class="stat-num" id="statMedium">0</div>
+        <div class="stat-lbl">Medium</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="step-num done">4</div>
+        <div class="card-head-text">
+          <h2>CVE Results</h2>
+          <p id="resultSubtitle">Vulnerabilities found in your project</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="filter-row">
+          <button class="filter-btn f-all active" onclick="setFilter('ALL', this)">All</button>
+          <button class="filter-btn f-critical" onclick="setFilter('CRITICAL', this)">🔴 Critical</button>
+          <button class="filter-btn f-high"     onclick="setFilter('HIGH', this)">🟠 High</button>
+          <button class="filter-btn f-medium"   onclick="setFilter('MEDIUM', this)">🟡 Medium</button>
+          <button class="filter-btn f-low"      onclick="setFilter('LOW', this)">🟢 Low</button>
+          <input class="search-input" type="text" placeholder="Search package / CVE…" oninput="searchTable(this.value)" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Severity</th>
+                <th>Package</th>
+                <th>CVE / OSV ID</th>
+                <th>Summary</th>
+                <th>Fix</th>
+              </tr>
+            </thead>
+            <tbody id="cveTableBody"></tbody>
+          </table>
+        </div>
+        <div class="action-row">
+          <button class="btn btn-success" onclick="downloadCSV()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download CSV
+          </button>
+          <button class="btn btn-outline" onclick="resetScan()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Scan again
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    OSV Scanner by Google · Data from <a href="https://osv.dev" target="_blank" style="color:var(--accent)">osv.dev</a> · NVD · GitHub Advisory Database
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+let allRows = [];
+let activeFilter = 'ALL';
+let searchTerm = '';
+
+// ── Generate CMD command dynamically ──────────────────────
+function updateCmd() {
+  const exe = document.getElementById('exePath').value.trim() || 'osv-scanner.exe';
+  const pom = document.getElementById('pomPath').value.trim() || 'pom.xml';
+  const out = pom.replace('pom.xml', 'osv-report.json').replace(/\\[^\\]+$/, '\\osv-report.json');
+  document.getElementById('scanCmdText').innerHTML =
+    `<span class="val">${escHtml(exe)}</span> scan source ` +
+    `<span class="flag">--lockfile</span> <span class="val">${escHtml(pom)}</span> ` +
+    `<span class="flag">--format</span> json ` +
+    `<span class="flag">--output-file</span> <span class="val">${escHtml(out)}</span>`;
+}
+document.getElementById('exePath').addEventListener('input', updateCmd);
+document.getElementById('pomPath').addEventListener('input', updateCmd);
+updateCmd();
+
+// ── Copy command ───────────────────────────────────────────
+function copyCmd(boxId) {
+  const box = document.getElementById(boxId);
+  const text = box.innerText.replace('Copy','').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = box.querySelector('.cmd-copy');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+// ── Parse OSV JSON ─────────────────────────────────────────
+function parseOSV(json) {
+  const data = JSON.parse(json);
+  const rows = [];
+  const results = data.results || [];
+  results.forEach(result => {
+    (result.packages || []).forEach(pkg => {
+      const name = pkg.package?.name || '?';
+      const ver  = pkg.package?.version || '?';
+      (pkg.vulnerabilities || []).forEach(vuln => {
+        const cve = (vuln.aliases || []).find(a => a.startsWith('CVE-')) || null;
+        const sev = getSeverity(vuln);
+        rows.push({
+          severity: sev,
+          package:  name,
+          version:  ver,
+          osvId:    vuln.id || '',
+          cve:      cve || '',
+          summary:  vuln.summary || vuln.details?.slice(0, 120) || '',
+          fixed:    getFixed(vuln),
+          link:     `https://osv.dev/vulnerability/${vuln.id}`
+        });
+      });
+    });
+  });
+  // sort: CRITICAL first
+  const sevOrder = {CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,UNKNOWN:4};
+  rows.sort((a,b) => (sevOrder[a.severity]??4) - (sevOrder[b.severity]??4));
+  return rows;
+}
+
+function getSeverity(vuln) {
+  // Try database_specific first
+  const db = vuln.database_specific?.severity?.toUpperCase();
+  if (db && ['CRITICAL','HIGH','MEDIUM','LOW'].includes(db)) return db;
+  // Try severity array
+  if (vuln.severity?.length) {
+    const score = vuln.severity[0].score || '';
+    const m = score.match(/(\d+\.?\d*)\s*$/);
+    if (m) {
+      const n = parseFloat(m[1]);
+      if (n >= 9.0) return 'CRITICAL';
+      if (n >= 7.0) return 'HIGH';
+      if (n >= 4.0) return 'MEDIUM';
+      return 'LOW';
+    }
+  }
+  return 'UNKNOWN';
+}
+
+function getFixed(vuln) {
+  const fixed = [];
+  (vuln.affected || []).forEach(a => {
+    (a.ranges || []).forEach(r => {
+      (r.events || []).forEach(e => {
+        if (e.fixed) fixed.push(e.fixed);
+      });
+    });
+  });
+  return fixed.length ? fixed[0] : '—';
+}
+
+// ── Render table ───────────────────────────────────────────
+function renderTable() {
+  const body = document.getElementById('cveTableBody');
+  const filtered = allRows.filter(r => {
+    const matchSev = activeFilter === 'ALL' || r.severity === activeFilter;
+    const term = searchTerm.toLowerCase();
+    const matchSearch = !term ||
+      r.package.toLowerCase().includes(term) ||
+      r.cve.toLowerCase().includes(term) ||
+      r.osvId.toLowerCase().includes(term) ||
+      r.summary.toLowerCase().includes(term);
+    return matchSev && matchSearch;
+  });
+
+  if (!filtered.length) {
+    body.innerHTML = `<tr><td colspan="5" class="no-results">No CVEs match current filter.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = filtered.map(r => `
+    <tr>
+      <td><span class="sev-badge sev-${r.severity}">${r.severity}</span></td>
+      <td>
+        <div class="pkg-name">${escHtml(r.package)}</div>
+        <div class="pkg-ver">${escHtml(r.version)}</div>
+      </td>
+      <td>
+        <div class="cve-id">
+          ${r.cve ? `<a class="cve-link" href="https://nvd.nist.gov/vuln/detail/${r.cve}" target="_blank">${escHtml(r.cve)}</a>` : ''}
+        </div>
+        <div style="font-size:11px;margin-top:2px">
+          <a class="cve-link" href="${escHtml(r.link)}" target="_blank" style="color:var(--text3)">${escHtml(r.osvId)}</a>
+        </div>
+      </td>
+      <td><div class="summary-text">${escHtml(r.summary)}</div></td>
+      <td><span style="font-family:var(--mono);font-size:12px;color:${r.fixed==='—'?'var(--text3)':'var(--green)'}">${escHtml(r.fixed)}</span></td>
+    </tr>
+  `).join('');
+}
+
+// ── Run analysis ───────────────────────────────────────────
+function runScan() {
+  const raw = document.getElementById('jsonInput').value.trim();
+  const status = document.getElementById('scanStatus');
+
+  if (!raw) {
+    showStatus('error', 'Please paste the JSON output from OSV Scanner first.');
+    return;
+  }
+
+  try {
+    allRows = parseOSV(raw);
+  } catch(e) {
+    showStatus('error', 'Could not parse JSON. Make sure you paste the full contents of osv-report.json.');
+    return;
+  }
+
+  if (!allRows.length) {
+    showStatus('success', '✓ No vulnerabilities found in the scanned pom.xml.');
+    return;
+  }
+
+  // Stats
+  const counts = {CRITICAL:0, HIGH:0, MEDIUM:0, LOW:0};
+  allRows.forEach(r => { if(counts[r.severity]!==undefined) counts[r.severity]++; });
+  document.getElementById('statTotal').textContent    = allRows.length;
+  document.getElementById('statCritical').textContent = counts.CRITICAL;
+  document.getElementById('statHigh').textContent     = counts.HIGH;
+  document.getElementById('statMedium').textContent   = counts.MEDIUM;
+  document.getElementById('resultSubtitle').textContent =
+    `${allRows.length} vulnerabilities across ${new Set(allRows.map(r=>r.package)).size} packages`;
+
+  activeFilter = 'ALL';
+  searchTerm = '';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.filter-btn.f-all').classList.add('active');
+  document.querySelector('.search-input').value = '';
+
+  renderTable();
+  document.getElementById('resultsSection').classList.add('visible');
+  document.getElementById('resultsSection').scrollIntoView({behavior:'smooth', block:'start'});
+  showStatus('success', `✓ Found ${allRows.length} CVEs. Scroll down to see results and download CSV.`);
+}
+
+// ── Filters & search ───────────────────────────────────────
+function setFilter(sev, btn) {
+  activeFilter = sev;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+function searchTable(val) {
+  searchTerm = val;
+  renderTable();
+}
+
+// ── Download CSV ───────────────────────────────────────────
+function downloadCSV() {
+  const headers = ['Severity','Package','Version','CVE','OSV_ID','Summary','Fixed_Version','OSV_Link'];
+  const rows = allRows.map(r => [
+    r.severity, r.package, r.version, r.cve, r.osvId,
+    '"' + r.summary.replace(/"/g,'""') + '"',
+    r.fixed, r.link
+  ]);
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'osv-cve-report.csv';
+  a.click();
+}
+
+// ── Reset ──────────────────────────────────────────────────
+function resetScan() {
+  document.getElementById('jsonInput').value = '';
+  document.getElementById('resultsSection').classList.remove('visible');
+  document.getElementById('scanStatus').classList.remove('visible');
+  allRows = [];
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ── Load sample (for demo) ─────────────────────────────────
+function loadSample() {
+  const sample = {
+    "results": [{
+      "source": {"path": "pom.xml", "type": "lockfile"},
+      "packages": [
+        {
+          "package": {"name": "log4j-core", "version": "2.14.1", "ecosystem": "Maven"},
+          "vulnerabilities": [{
+            "id": "GHSA-jfh8-c2jp-jvvx", "aliases": ["CVE-2021-44228"],
+            "summary": "Remote code execution in Log4j 2 via JNDI lookup (Log4Shell)",
+            "database_specific": {"severity": "CRITICAL"},
+            "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H/10.0"}],
+            "affected": [{"package":{"name":"log4j-core"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"2.0"},{"fixed":"2.15.0"}]}]}]
+          }]
+        },
+        {
+          "package": {"name": "spring-webmvc", "version": "5.3.17", "ecosystem": "Maven"},
+          "vulnerabilities": [{
+            "id": "GHSA-36p3-wjmg-h94x", "aliases": ["CVE-2022-22965"],
+            "summary": "Spring Framework RCE via data binding on JDK 9+ (Spring4Shell)",
+            "database_specific": {"severity": "CRITICAL"},
+            "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/9.8"}],
+            "affected": [{"package":{"name":"spring-webmvc"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"5.3.0"},{"fixed":"5.3.18"}]}]}]
+          }]
+        },
+        {
+          "package": {"name": "commons-collections", "version": "3.2.1", "ecosystem": "Maven"},
+          "vulnerabilities": [{
+            "id": "GHSA-6hgm-866r-3cjv", "aliases": ["CVE-2015-7501"],
+            "summary": "Remote code execution via Java deserialization gadget chain",
+            "database_specific": {"severity": "CRITICAL"},
+            "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/9.8"}],
+            "affected": [{"package":{"name":"commons-collections"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"3.0"},{"fixed":"3.2.2"}]}]}]
+          }]
+        },
+        {
+          "package": {"name": "commons-beanutils", "version": "1.9.3", "ecosystem": "Maven"},
+          "vulnerabilities": [{
+            "id": "GHSA-p4x4-rw2p-8j8m", "aliases": ["CVE-2019-10086"],
+            "summary": "Class loader manipulation via BeanUtils property access",
+            "database_specific": {"severity": "HIGH"},
+            "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L/7.3"}],
+            "affected": [{"package":{"name":"commons-beanutils"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"1.0"},{"fixed":"1.9.4"}]}]}]
+          }]
+        },
+        {
+          "package": {"name": "snakeyaml", "version": "1.30", "ecosystem": "Maven"},
+          "vulnerabilities": [{
+            "id": "GHSA-3mc7-4q67-w48m", "aliases": ["CVE-2022-25857"],
+            "summary": "Denial of service via stack overflow during YAML parsing",
+            "database_specific": {"severity": "HIGH"},
+            "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H/7.5"}],
+            "affected": [{"package":{"name":"snakeyaml"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.31"}]}]}]
+          }]
+        },
+        {
+          "package": {"name": "httpclient", "version": "4.5.12", "ecosystem": "Maven"},
+          "vulnerabilities": [{
+            "id": "GHSA-7r82-7xv7-xcpj", "aliases": ["CVE-2020-13956"],
+            "summary": "Incorrect handling of malformed authority in URIs",
+            "database_specific": {"severity": "MEDIUM"},
+            "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N/5.3"}],
+            "affected": [{"package":{"name":"httpclient"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"4.0"},{"fixed":"4.5.13"}]}]}]
+          }]
+        }
+      ]
+    }]
+  };
+  document.getElementById('jsonInput').value = JSON.stringify(sample, null, 2);
+  showStatus('info', 'Sample data loaded. Click "Analyse CVEs" to see results.');
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function showStatus(type, msg) {
+  const el = document.getElementById('scanStatus');
+  el.className = `status-box ${type} visible`;
+  el.textContent = msg;
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

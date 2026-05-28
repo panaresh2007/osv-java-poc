@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.osvpoc</groupId>
+  <artifactId>vulnerable-java-app</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+  <name>OSV POC - Vulnerable Java App</name>
+  <description>
+    Intentionally vulnerable Java project for OSV Scanner CVE detection POC.
+    DO NOT use these dependency versions in production.
+  </description>
+
+  <properties>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+  </properties>
+
+  <dependencies>
+
+    <!-- CVE-2021-44228 (Log4Shell) CVSS 10.0 CRITICAL -->
+    <!-- Remote code execution via JNDI injection in log messages -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>2.14.1</version>
+    </dependency>
+
+    <!-- CVE-2022-22965 (Spring4Shell) CVSS 9.8 CRITICAL -->
+    <!-- RCE via data binding in Spring MVC on JDK 9+ -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-webmvc</artifactId>
+      <version>5.3.17</version>
+    </dependency>
+
+    <!-- CVE-2021-26291 (Maven) CVSS 9.1 CRITICAL -->
+    <!-- Hijacking builds via HTTP repositories -->
+    <dependency>
+      <groupId>org.apache.maven</groupId>
+      <artifactId>maven-core</artifactId>
+      <version>3.8.1</version>
+    </dependency>
+
+    <!-- CVE-2019-10086 (Commons BeanUtils) CVSS 7.3 HIGH -->
+    <!-- Class loader manipulation attack -->
+    <dependency>
+      <groupId>commons-beanutils</groupId>
+      <artifactId>commons-beanutils</artifactId>
+      <version>1.9.3</version>
+    </dependency>
+
+    <!-- CVE-2015-7501 (Commons Collections) CVSS 9.8 CRITICAL -->
+    <!-- Java deserialization RCE via gadget chains -->
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
+      <version>3.2.1</version>
+    </dependency>
+
+    <!-- CVE-2020-13956 (Apache HttpClient) CVSS 5.3 MEDIUM -->
+    <!-- Incorrect handling of malformed authority component in URIs -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <version>4.5.12</version>
+    </dependency>
+
+    <!-- CVE-2022-42003 (Jackson Databind) CVSS 7.5 HIGH -->
+    <!-- Uncontrolled resource consumption during deserialization -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.13.2</version>
+    </dependency>
+
+    <!-- CVE-2023-44487 (Netty / HTTP2) CVSS 7.5 HIGH -->
+    <!-- HTTP/2 Rapid Reset Attack -->
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-http2</artifactId>
+      <version>4.1.86.Final</version>
+    </dependency>
+
+    <!-- CVE-2016-1000027 (Spring Web) CVSS 9.8 CRITICAL -->
+    <!-- Remote code execution via HttpInvokerServiceExporter -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-web</artifactId>
+      <version>5.3.17</version>
+    </dependency>
+
+    <!-- CVE-2022-25857 (SnakeYAML) CVSS 7.5 HIGH -->
+    <!-- Denial of service via stack overflow during parsing -->
+    <dependency>
+      <groupId>org.yaml</groupId>
+      <artifactId>snakeyaml</artifactId>
+      <version>1.30</version>
+    </dependency>
+
+  </dependencies>
+</project>
