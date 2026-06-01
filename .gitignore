@@ -8,3 +8,19 @@ target/
 node_modules/
 osv-report.json
 osv-scanner.exe
+
+# API results
+api/osv-api-results/
+osv-results/
+scan-temp/
+*.sarif
+findings.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Maven
+target/
+*.jar
